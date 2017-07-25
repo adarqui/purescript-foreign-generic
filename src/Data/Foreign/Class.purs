@@ -1,13 +1,15 @@
 module Data.Foreign.Class where
 
 import Prelude
+import Control.Alt ((<|>))
 import Control.Monad.Except (mapExcept)
 import Data.Array ((..), zipWith, length)
 import Data.Bifunctor (lmap)
-import Data.Foreign (F, Foreign, ForeignError(ErrorAtIndex), readArray, readBoolean, readChar, readInt, readNumber, readString, toForeign)
+import Data.Foreign (F, Foreign, ForeignError(JSONError, ErrorAtIndex), readArray, readBoolean, readChar, readInt, readNumber, readString, toForeign, isNull, fail)
 import Data.Foreign.NullOrUndefined (NullOrUndefined(..), readNullOrUndefined, undefined)
-import Data.Maybe (maybe)
+import Data.Maybe (Maybe(..), maybe)
 import Data.Traversable (sequence)
+import Data.Tuple (Tuple(..))
 
 -- | The `Decode` class is used to generate decoding functions
 -- | of the form `Foreign -> F a` using `generics-rep` deriving.
@@ -97,3 +99,16 @@ instance decodeNullOrUndefined :: Decode a => Decode (NullOrUndefined a) where
 
 instance encodeNullOrUndefined :: Encode a => Encode (NullOrUndefined a) where
   encode (NullOrUndefined a) = maybe undefined encode a
+
+
+
+instance decodeMaybe :: Decode a => Decode (Maybe a) where
+  decode f
+    | isNull f  = pure Nothing
+    | otherwise = (Just <$> decode f) <|> (pure Nothing)
+
+instance decodeTuple :: (Decode a, Decode b) => Decode (Tuple a b) where
+  decode f = readArray f >>= j
+    where
+    j [a,b] = Tuple <$> decode a <*> decode b
+    j _ = fail $ JSONError "Couldn't decode Tuple"
